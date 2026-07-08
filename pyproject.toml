@@ -10,17 +10,29 @@ dependencies = [
     "opencv-python==4.10.0.84",
     "pyautogui==0.9.54",
     "pynput==1.7.7",
-    "onnxruntime-directml==1.18.0",
+    "onnxruntime-directml==1.18.0 ; sys_platform == 'win32'",
     "mss==9.0.1",
     "shapely==2.0.4",
     "pyclipper==1.3.0.post5",
     "soundcard==0.4.3",
     "librosa==0.10.2.post1",
-    "gensim==4.3.3",
     "pygit2==1.19.0",
     # pywin32>=312 的 wheel 不再内置 mfc140u.dll，未装 VC++ 2015-2022 Redistributable (x64) 的机器
     # import win32ui 会闪退（issue #2428）；锁 <312 沿用 311（自带 pythonwin/mfc140u.dll）。等上游 build 313 修复后放开。
-    "pywin32<312",
+    "pywin32<312 ; sys_platform == 'win32'",
+    # Linux 移植（见 docs/develop/one_dragon/linux_port_design.md）：
+    # CUDA 推理走 onnxruntime-gpu + pip 版 NVIDIA 库（无需系统装 CUDA，import 前需 RTLD_GLOBAL 预载）；
+    # cudnn 仍用 cu13 后缀包，其余 NVIDIA 包已改无后缀新名（旧 -cu13 名已弃用、无后缀 cudnn 是占位包）
+    "onnxruntime-gpu==1.27.0 ; sys_platform == 'linux'",
+    "nvidia-cuda-runtime ; sys_platform == 'linux'",
+    "nvidia-cuda-nvrtc ; sys_platform == 'linux'",
+    "nvidia-cublas ; sys_platform == 'linux'",
+    "nvidia-cufft ; sys_platform == 'linux'",
+    "nvidia-curand ; sys_platform == 'linux'",
+    "nvidia-cudnn-cu13 ; sys_platform == 'linux'",
+    # Linux 窗口管理（X11/EWMH）与内核级输入注入（uinput）
+    "python-xlib==0.33 ; sys_platform == 'linux'",
+    "evdev==1.9.3 ; sys_platform == 'linux'",
 ]
 
 [dependency-groups]
@@ -32,7 +44,7 @@ dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
     "ruff>=0.12.10",
-    "pyuac==0.0.3",
+    "pyuac==0.0.3 ; sys_platform == 'win32'",
     "mcp>=1.0.0",
     "uvicorn>=0.30.0",
     "psutil>=7.2.2",
@@ -40,13 +52,18 @@ dev = [
 ]
 
 gamepad = [
-    "vgamepad==0.1.0",
+    "vgamepad==0.1.0 ; sys_platform == 'win32'",
 ]
 
 [tool.uv]
 package = false
 cache-dir = "./.install/uv_cache"
-environments = ["sys_platform == 'win32'"]
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+override-dependencies = [
+    # mouseinfo 在 Linux 会拉取古老的 python3-xlib(0.15)，与 python-xlib 模块同名冲突，
+    # 且缺 ~/.Xauthority 时连接 X 直接报错；改成永不安装，统一用 python-xlib==0.33
+    "python3-xlib ; sys_platform == 'win32'",
+]
 default-groups = []
 
 # Ruff configuration

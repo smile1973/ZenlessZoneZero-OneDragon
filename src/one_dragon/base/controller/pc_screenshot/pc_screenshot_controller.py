@@ -1,3 +1,5 @@
+import sys
+
 import cv2
 from cv2.typing import MatLike
 
@@ -29,12 +31,19 @@ class PcScreenshotController:
         self.standard_width: int = standard_width
         self.standard_height: int = standard_height
 
-        self.strategies: dict[str, ScreencapperBase] = {
-            ScreenshotMethodEnum.PRINT_WINDOW.value.value: PrintWindowScreencapper(game_win, standard_width, standard_height),
-            ScreenshotMethodEnum.BITBLT.value.value: BitBltScreencapper(game_win, standard_width, standard_height),
-            ScreenshotMethodEnum.MSS.value.value: MssScreencapper(game_win, standard_width, standard_height),
-            ScreenshotMethodEnum.PIL.value.value: PilScreencapper(game_win, standard_width, standard_height),
-        }
+        self.strategies: dict[str, ScreencapperBase] = {}
+        if sys.platform == 'win32':
+            # GDI 系后端为 Windows 专属
+            self.strategies[ScreenshotMethodEnum.PRINT_WINDOW.value.value] = PrintWindowScreencapper(game_win, standard_width, standard_height)
+            self.strategies[ScreenshotMethodEnum.BITBLT.value.value] = BitBltScreencapper(game_win, standard_width, standard_height)
+        else:
+            # Linux 首选 XComposite（Wayland 下 mss 抓屏不可用）
+            from one_dragon.base.controller.pc_screenshot.xcomposite_screencapper import (
+                XCompositeScreencapper,
+            )
+            self.strategies[ScreenshotMethodEnum.XCOMPOSITE.value.value] = XCompositeScreencapper(game_win, standard_width, standard_height)
+        self.strategies[ScreenshotMethodEnum.MSS.value.value] = MssScreencapper(game_win, standard_width, standard_height)
+        self.strategies[ScreenshotMethodEnum.PIL.value.value] = PilScreencapper(game_win, standard_width, standard_height)
         self.active_strategy_name: str | None = None
 
     def get_screenshot(self, independent: bool = False, resize: bool = True) -> MatLike | None:
@@ -133,12 +142,19 @@ class PcScreenshotController:
         Returns:
             方法名称列表，按优先级排序
         """
-        default_priority = [
-            ScreenshotMethodEnum.PRINT_WINDOW.value.value,
-            ScreenshotMethodEnum.BITBLT.value.value,
-            ScreenshotMethodEnum.MSS.value.value,
-            ScreenshotMethodEnum.PIL.value.value,
-        ]
+        if sys.platform == 'win32':
+            default_priority = [
+                ScreenshotMethodEnum.PRINT_WINDOW.value.value,
+                ScreenshotMethodEnum.BITBLT.value.value,
+                ScreenshotMethodEnum.MSS.value.value,
+                ScreenshotMethodEnum.PIL.value.value,
+            ]
+        else:
+            default_priority = [
+                ScreenshotMethodEnum.XCOMPOSITE.value.value,
+                ScreenshotMethodEnum.MSS.value.value,
+                ScreenshotMethodEnum.PIL.value.value,
+            ]
 
         if method == ScreenshotMethodEnum.AUTO.value.value or method not in self.strategies:
             return default_priority.copy()

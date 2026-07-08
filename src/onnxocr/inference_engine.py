@@ -4,6 +4,8 @@ from collections.abc import Sequence
 from enum import Enum
 from typing import Any
 
+from one_dragon.utils import ort_preload  # noqa: F401  Linux 下预载 CUDA 库，须在 onnxruntime 之前 import
+
 import onnxruntime
 
 from onnxocr.logger import get_logger

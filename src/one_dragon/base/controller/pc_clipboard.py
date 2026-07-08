@@ -1,9 +1,17 @@
+import sys
 import time
 
-import pywintypes
-import win32clipboard
-import win32con
 from pynput.keyboard import Controller, Key
+
+if sys.platform == 'win32':
+    import pywintypes
+    import win32clipboard
+    import win32con
+else:
+    # 非 Windows 平台占位：剪贴板 Linux 实现见 linux_port_design.md（Phase 3）
+    pywintypes = None
+    win32clipboard = None
+    win32con = None
 
 from one_dragon.utils.log_utils import log, mask_text
 

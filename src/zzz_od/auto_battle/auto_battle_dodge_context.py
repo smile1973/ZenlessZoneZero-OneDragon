@@ -79,14 +79,18 @@ class AudioRecorder:
         音频录制循环，持续录制音频数据。
         """
         # 这个在全局导入的话 会导致QT的选择文件无法使用
+        import sys
         import warnings
 
         import soundcard as sc
-        from soundcard.mediafoundation import SoundcardRuntimeWarning
 
-        warnings.filterwarnings('ignore', category=SoundcardRuntimeWarning)
+        if sys.platform == 'win32':
+            # SoundcardRuntimeWarning 是 Windows(Media Foundation) 后端专属，Linux 走 PulseAudio 后端无此类
+            from soundcard.mediafoundation import SoundcardRuntimeWarning
+            warnings.filterwarnings('ignore', category=SoundcardRuntimeWarning)
 
         try:
+            # Linux(PipeWire-pulse) 下 get_microphone(speaker.name, include_loopback=True) 会匹配 sink 的 monitor source
             _mic = sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
             _recorder = _mic.recorder(samplerate=self._sample_rate, channels=self._used_channel)
             with _recorder as audio_recorder:

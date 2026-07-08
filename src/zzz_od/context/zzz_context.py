@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from functools import cached_property
 
 from one_dragon.base.operation.one_dragon_context import OneDragonContext
@@ -95,6 +96,9 @@ class ZContext(OneDragonContext):
         """获取当前配置对应的窗口标题"""
         if self.game_account_config.use_custom_win_title:
             return self.game_account_config.custom_win_title
+        if sys.platform != 'win32':
+            # Linux 经 Steam(Proton) 启动，仅有国际服，窗口标题与区服配置无关
+            return 'ZenlessZoneZero'
         from one_dragon.base.config.game_account_config import GameRegionEnum
         if self.game_account_config.game_region == GameRegionEnum.CN.value.value \
                 or self.game_account_config.game_region == GameRegionEnum.CNB.value.value:

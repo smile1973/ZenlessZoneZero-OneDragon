@@ -1,15 +1,25 @@
 import contextlib
 import ctypes
+import sys
 import time
 from functools import lru_cache
 
 import pyautogui
-import win32api
-import win32con
-import win32gui
 from cv2.typing import MatLike
 from pynput import keyboard
 
+if sys.platform == 'win32':
+    import win32api
+    import win32con
+    import win32gui
+else:
+    # 非 Windows 平台：后台模式相关 win32 API 不可用（Linux 仅支持前台模式）
+    # 见 docs/develop/one_dragon/linux_port_design.md
+    win32api = None
+    win32con = None
+    win32gui = None
+
+from one_dragon.base.controller import linux_compositor, uinput_input
 from one_dragon.base.controller.controller_base import ControllerBase
 from one_dragon.base.controller.pc_button import pc_button_utils
 from one_dragon.base.controller.pc_button.ds4_button_controller import (
@@ -43,9 +53,21 @@ class PcControllerBase(ControllerBase):
         ControllerBase.__init__(self)
         self.standard_width: int = standard_width
         self.standard_height: int = standard_height
-        self.game_win: PcGameWindow = PcGameWindow(standard_width, standard_height)
+        if sys.platform == 'win32':
+            self.game_win: PcGameWindow = PcGameWindow(standard_width, standard_height)
+        else:
+            # Linux 使用 X11/XWayland 窗口实现（延迟 import 避免 Windows 上引入 Xlib）
+            from one_dragon.base.controller.x11_game_window import X11GameWindow
+            self.game_win: PcGameWindow = X11GameWindow(standard_width, standard_height)
 
-        self.keyboard_controller: KeyboardMouseController = KeyboardMouseController()
+        if sys.platform == 'win32':
+            self.keyboard_controller: PcButtonController = KeyboardMouseController()
+        else:
+            # Linux 走内核级 uinput（XTEST 在 Wayland/XWayland 下不可靠）
+            from one_dragon.base.controller.pc_button.uinput_button_controller import (
+                UInputButtonController,
+            )
+            self.keyboard_controller: PcButtonController = UInputButtonController()
         self.xbox_controller: XboxButtonController | None = None
         self.ds4_controller: Ds4ButtonController | None = None
 
@@ -182,6 +204,11 @@ class PcControllerBase(ControllerBase):
         Args:
             gamepad_type: 'xbox' 或 'ds4'
         """
+        if sys.platform != 'win32':
+            log.error('后台模式依赖 Windows 消息机制，Linux 仅支持前台模式')
+            self.enable_foreground_mode()
+            return
+
         if not pc_button_utils.is_vgamepad_installed():
             log.error('启用后台模式失败: 未检测到 vgamepad/ViGEmBus')
             self.background_mode = False
@@ -204,6 +231,11 @@ class PcControllerBase(ControllerBase):
         因此需要极短暂地将游戏窗口切到前台、发送鼠标移动、再切回。
         """
         if self._game_input_mode == 'keyboard_mouse':
+            return True
+
+        if sys.platform != 'win32':
+            # Linux 仅支持前台键鼠模式
+            self._game_input_mode = 'keyboard_mouse'
             return True
 
         hwnd = self.game_win.get_hwnd()
@@ -311,11 +343,17 @@ class PcControllerBase(ControllerBase):
             click_pos = get_current_mouse_pos()
 
         if pc_alt:
-            self.keyboard_controller.keyboard.press(keyboard.Key.alt)
+            if sys.platform == 'win32':
+                self.keyboard_controller.keyboard.press(keyboard.Key.alt)
+            else:
+                uinput_input.key_down('alt')
             time.sleep(0.2)
         win_click(click_pos, press_time=press_time)
         if pc_alt:
-            self.keyboard_controller.keyboard.release(keyboard.Key.alt)
+            if sys.platform == 'win32':
+                self.keyboard_controller.keyboard.release(keyboard.Key.alt)
+            else:
+                uinput_input.key_up('alt')
         return True
 
     def _gamepad_click(self, gamepad_key: str | None) -> bool:
@@ -509,7 +547,10 @@ class PcControllerBase(ControllerBase):
         Args:
             to_input: 文本
         """
-        self.keyboard_controller.keyboard.type(to_input)
+        if sys.platform == 'win32':
+            self.keyboard_controller.keyboard.type(to_input)
+        else:
+            uinput_input.type_text(to_input, interval=interval)
 
     def mouse_move(self, game_pos: Point) -> None:
         """
@@ -517,7 +558,10 @@ class PcControllerBase(ControllerBase):
         """
         win_pos = self.game_win.game2win_pos(game_pos)
         if win_pos is not None:
-            pyautogui.moveTo(win_pos.x, win_pos.y)
+            if sys.platform == 'win32':
+                pyautogui.moveTo(win_pos.x, win_pos.y)
+            else:
+                uinput_input.move_to(int(win_pos.x), int(win_pos.y))
             time.sleep(0.1)  # 原本 pyautogui 的操作会有0.1s延迟, 现在去掉了, 故在这里加上延迟
 
     @property
@@ -533,10 +577,14 @@ def win_click(pos: Point = None, press_time: float = 0.1, primary: bool = True):
         press_time: 按住时间
         primary: 是否点击鼠标主要按键（通常是左键）
     """
-    btn = pyautogui.PRIMARY if primary else pyautogui.SECONDARY
     if pos is None:
         pos = get_current_mouse_pos()
 
+    if sys.platform != 'win32':
+        uinput_input.click_at(int(pos.x), int(pos.y), press_time=press_time, primary=primary)
+        return
+
+    btn = pyautogui.PRIMARY if primary else pyautogui.SECONDARY
     pyautogui.moveTo(pos.x, pos.y)
     pyautogui.mouseDown(button=btn)
     time.sleep(max(0.001, press_time))
@@ -550,6 +598,11 @@ def win_scroll(clicks: int, pos: Point = None):
         clicks: 负数时为向上滚动
         pos: 滚动位置 不传入时为鼠标当前位置
     """
+    if sys.platform != 'win32':
+        uinput_input.scroll_wheel(clicks,
+                                  None if pos is None else int(pos.x),
+                                  None if pos is None else int(pos.y))
+        return
     if pos is not None:
         pyautogui.moveTo(pos.x, pos.y)
     d = 2000 if get_mouse_sensitivity() <= 10 else 1000
@@ -573,11 +626,27 @@ def drag_mouse(start: Point, end: Point, duration: float = 0.5):
         end: 拖动位置
         duration: 拖动鼠标到目标位置，持续秒数
     """
+    if sys.platform != 'win32':
+        uinput_input.move_to(int(start.x), int(start.y))
+        time.sleep(0.02)
+        uinput_input.mouse_down('left')
+        steps = max(int(duration / 0.02), 5)
+        for i in range(1, steps + 1):
+            t = i / steps
+            uinput_input.move_to(int(start.x + (end.x - start.x) * t),
+                                 int(start.y + (end.y - start.y) * t))
+            time.sleep(duration / steps)
+        uinput_input.mouse_up('left')
+        return
     pyautogui.moveTo(start.x, start.y)  # 将鼠标移动到起始位置
     pyautogui.dragTo(end.x, end.y, duration=duration)
 
 
 def get_current_mouse_pos() -> Point:
     """获取鼠标当前坐标。"""
+    if sys.platform != 'win32':
+        cursor = linux_compositor.get_cursor_pos()
+        if cursor is not None:
+            return Point(cursor[0], cursor[1])
     pos = pyautogui.position()
     return Point(pos.x, pos.y)

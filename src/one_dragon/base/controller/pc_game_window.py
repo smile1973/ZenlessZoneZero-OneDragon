@@ -1,9 +1,23 @@
 import ctypes
-from ctypes.wintypes import RECT
+import sys
 
 import pyautogui
-import win32ui
-from pygetwindow import Win32Window
+
+if sys.platform == 'win32':
+    from ctypes.wintypes import RECT
+
+    import win32ui
+    from pygetwindow import Win32Window
+else:
+    # 非 Windows 平台无 win32 依赖，占位保证模块可导入
+    # Linux 窗口实现见 docs/develop/one_dragon/linux_port_design.md（Phase 2）
+    win32ui = None
+
+    class RECT:
+        """类型注解占位"""
+
+    class Win32Window:
+        """类型注解占位"""
 
 from one_dragon.base.geometry.point import Point
 from one_dragon.base.geometry.rectangle import Rect

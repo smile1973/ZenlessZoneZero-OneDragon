@@ -1,8 +1,10 @@
 import ctypes
+import sys
 import time
 
 from cv2.typing import MatLike
 
+from one_dragon.base.controller import uinput_input
 from one_dragon.base.controller.pc_controller_base import PcControllerBase
 from one_dragon.utils import cv2_utils
 from zzz_od.config.game_config import GameConfig
@@ -202,9 +204,12 @@ class ZPcController(PcControllerBase):
             return
         if self.background_mode:
             self._gamepad_turn(dx, dy)
-        else:
+        elif sys.platform == 'win32':
             self._ensure_mouse_mode()
             ctypes.windll.user32.mouse_event(0x0001, int(dx), int(dy))
+        else:
+            # Linux 走 uinput 相对移动（Phase 0 已实测 Proton 游戏内镜头可转）
+            uinput_input.move_relative(int(dx), int(dy))
 
     def _gamepad_turn(self, dx: float, dy: float) -> None:
         """

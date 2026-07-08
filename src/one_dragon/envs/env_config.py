@@ -74,6 +74,7 @@ class ScreenshotMethodEnum(Enum):
     BITBLT = ConfigItem('BitBlt', 'bitblt')
     MSS = ConfigItem('MSS', 'mss')
     PIL = ConfigItem('PIL', 'pil')
+    XCOMPOSITE = ConfigItem('XComposite', 'xcomposite')
 
 
 class EnvConfig(YamlConfig):

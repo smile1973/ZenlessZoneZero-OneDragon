@@ -3,6 +3,8 @@ import time
 import urllib.request
 import zipfile
 
+from one_dragon.utils import ort_preload  # noqa: F401  Linux 下预载 CUDA 库，须在 onnxruntime 之前 import
+
 import onnxruntime as ort
 
 from one_dragon.utils import gpu_executor

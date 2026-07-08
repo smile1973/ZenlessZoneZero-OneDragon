@@ -1,14 +1,21 @@
 import io
 import os
+import sys
 import time
 from functools import lru_cache
 from typing import Optional
 
 import cv2
-import win32clipboard
-import win32con
 from cv2.typing import MatLike
 from PIL import Image
+
+if sys.platform == 'win32':
+    import win32clipboard
+    import win32con
+else:
+    # 非 Windows 平台占位：复制图片到剪贴板为 Windows 专属调试功能
+    win32clipboard = None
+    win32con = None
 
 from one_dragon.utils import cv2_utils, os_utils
 from one_dragon.utils.log_utils import log
@@ -34,6 +41,9 @@ def get_debug_image(filename, suffix: str = '.png') -> MatLike:
 
 def copy_image_to_clipboard(image) -> bool:
     """将图片复制到剪贴板"""
+    if win32clipboard is None:
+        log.debug('非 Windows 平台暂不支持复制图片到剪贴板')
+        return False
     try:
         pil_image = Image.fromarray(image)
         with io.BytesIO() as output:
